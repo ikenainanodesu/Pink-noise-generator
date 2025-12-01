@@ -22,7 +22,7 @@ Ensure both files are located in the same directory:
 
 ## 🧠 Algorithm Principle (SMPTE ST 2095-1)
 
-This tool strictly adheres to the **SMPTE ST 2095-1:2023** standard. Pink noise is a random signal with equal energy per octave (power spectral density is inversely proportional to the frequency, $1/f$).
+This tool adheres to the **SMPTE ST 2095-1:2023** standard. Pink noise is a random signal with equal energy per octave (power spectral density is inversely proportional to the frequency, $1/f$).
 
 ### Core Implementation Details:
 
