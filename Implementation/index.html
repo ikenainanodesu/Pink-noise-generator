@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMPTE ST 2095-1 Pink Noise Generator (TS)</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --bg-color: #f4f7f6;
+            --panel-bg: #ffffff;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: var(--panel-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 500px;
+        }
+        h1 { font-size: 1.4rem; color: #333; margin-bottom: 1.5rem; text-align: center; }
+        .form-group { margin-bottom: 1.2rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #555; }
+        .row { display: flex; gap: 1rem; align-items: center; }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box; 
+        }
+        .radio-group label { font-weight: normal; margin-right: 15px; display: inline-flex; align-items: center; cursor: pointer; }
+        .radio-group input { margin-right: 5px; }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        .progress-container {
+            margin-top: 15px;
+            height: 6px;
+            background-color: #eee;
+            border-radius: 3px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: var(--primary-color);
+            transition: width 0.1s;
+        }
+
+        .result-area {
+            margin-top: 20px;
+            text-align: center;
+            display: none;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        .stats { font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
+        .download-btn {
+            background-color: #28a745;
+            margin-top: 10px;
+            display: inline-block;
+            text-decoration: none;
+            text-align: center;
+            box-sizing: border-box;
+        }
+        .download-btn:hover { background-color: #218838; }
+
+        canvas {
+            width: 100%;
+            height: 80px;
+            background-color: #fafafa;
+            border: 1px solid #e0e0e0;
+            margin-top: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>SMPTE ST 2095-1 Generator</h1>
+    
+    <div class="form-group">
+        <label>1. Sample Rate:</label>
+        <div class="radio-group">
+            <label><input type="radio" name="samplerate" value="48000" checked> 48 kHz (Default)</label>
+            <label><input type="radio" name="samplerate" value="96000"> 96 kHz</label>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>2. Duration (seconds):</label>
+        <input type="number" id="duration" value="10" min="1" max="3600">
+    </div>
+
+    <div class="form-group">
+        <label>3. Channel Count:</label>
+        <input type="number" id="channels" value="1" min="1" max="16">
+    </div>
+
+    <div class="form-group">
+        <label>4. Filename:</label>
+        <input type="text" id="filename" value="pink_noise_output">
+    </div>
+
+    <button id="generateBtn">Generate Audio</button>
+    
+    <div class="progress-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div class="result-area" id="resultArea">
+        <div class="stats" id="statsText">Measurement: --</div>
+        <canvas id="waveformCanvas"></canvas>
+        <a id="downloadLink" class="download-btn button">Download WAV File</a>
+    </div>
+</div>
+
+<script>
+/**
+ * TypeScript Logic Transpiled to JS for immediate execution
+ * (The Class SmptePinkNoiseGenerator logic from Part 1 is embedded here)
+ */
+
+class SmptePinkNoiseGenerator {
+    constructor(config) {
+        this.SAMPLE_SIZE = 3;
+        this.MAX_PEAK_DB = -9.5;
+        this.config = config;
+    }
+    async generate() {
+        const { sampleRate, duration, channels, onProgress } = this.config;
+        let samplesPerPeriod = 524288;
+        let randStep = 52737;
+        if (sampleRate > 48000) {
+            samplesPerPeriod = 1048576;
+            randStep = 163841;
+        }
+        const randMax = samplesPerPeriod - 1;
+        let seed = 0;
+        let white = 0.0;
+        const scaleFactor = 2.0 / randMax;
+        const maxAmp = Math.pow(10.0, this.MAX_PEAK_DB / 20.0);
+        const hpFc = 10.0;
+        let lpFc = 22400.0;
+        if (lpFc > sampleRate / 2.0)
+            lpFc = sampleRate / 2.0;
+        const w0t = 2.0 * Math.PI * hpFc / sampleRate;
+        const k = Math.tan((2.0 * Math.PI * lpFc / sampleRate) / 2.0);
+        const k2 = k * k;
+        const hp1_a1 = -2.0 * Math.exp(-0.3826835 * w0t) * Math.cos(0.9238795 * w0t);
+        const hp1_a2 = Math.exp(2.0 * -0.3826835 * w0t);
+        const hp1_b0 = (1.0 - hp1_a1 + hp1_a2) / 4.0;
+        const hp1_b1 = -2.0 * hp1_b0;
+        const hp1_b2 = hp1_b0;
+        const hp2_a1 = -2.0 * Math.exp(-0.9238795 * w0t) * Math.cos(0.3826835 * w0t);
+        const hp2_a2 = Math.exp(2.0 * -0.9238795 * w0t);
+        const hp2_b0 = (1.0 - hp2_a1 + hp2_a2) / 4.0;
+        const hp2_b1 = -2.0 * hp2_b0;
+        const hp2_b2 = hp2_b0;
+        const lp1_denom = k2 + (k / 1.306563) + 1.0;
+        const lp1_a1 = (2.0 * (k2 - 1.0)) / lp1_denom;
+        const lp1_a2 = (k2 - (k / 1.306563) + 1.0) / lp1_denom;
+        const lp1_b0 = k2 / lp1_denom;
+        const lp1_b1 = 2.0 * lp1_b0;
+        const lp1_b2 = lp1_b0;
+        const lp2_denom = k2 + (k / 0.541196) + 1.0;
+        const lp2_a1 = (2.0 * (k2 - 1.0)) / lp2_denom;
+        const lp2_a2 = (k2 - (k / 0.541196) + 1.0) / lp2_denom;
+        const lp2_b0 = k2 / lp2_denom;
+        const lp2_b1 = 2.0 * lp2_b0;
+        const lp2_b2 = lp2_b0;
+        let hp1w1 = 0.0, hp1w2 = 0.0, hp2w1 = 0.0, hp2w2 = 0.0;
+        let lp1w1 = 0.0, lp1w2 = 0.0, lp2w1 = 0.0, lp2w2 = 0.0;
+        let pink = 0.0;
+        let p_lp1 = 0.0, p_lp2 = 0.0, p_lp3 = 0.0, p_lp4 = 0.0, p_lp5 = 0.0, p_lp6 = 0.0;
+        let totalSamples = samplesPerPeriod + (sampleRate * duration);
+        const diff = totalSamples % samplesPerPeriod;
+        if (diff !== 0)
+            totalSamples += samplesPerPeriod - diff;
+        const outputSamples = totalSamples - samplesPerPeriod;
+        const dataLength = this.SAMPLE_SIZE * outputSamples * channels;
+        const headerLength = 44;
+        const buffer = new ArrayBuffer(headerLength + dataLength);
+        const view = new DataView(buffer);
+        this.writeWavHeader(view, dataLength, sampleRate, channels);
+        let accum = 0.0;
+        let writeOffset = 44;
+        const previewSize = 1000;
+        const previewStep = Math.floor(outputSamples / previewSize);
+        const previewData = new Float32Array(previewSize);
+        let previewIndex = 0;
+        const batchSize = 10000;
+        for (let i = 0; i < totalSamples; i++) {
+            if (i % batchSize === 0) {
+                if (onProgress)
+                    onProgress(i / totalSamples);
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+            seed = (1664525 * seed + randStep) & randMax;
+            white = seed * scaleFactor - 1.0;
+            p_lp1 = 0.9994551 * p_lp1 + 0.00198166688621989 * white;
+            p_lp2 = 0.9969859 * p_lp2 + 0.00263702334184061 * white;
+            p_lp3 = 0.9844470 * p_lp3 + 0.00643213710202331 * white;
+            p_lp4 = 0.9161757 * p_lp4 + 0.01438952538362820 * white;
+            p_lp5 = 0.6563399 * p_lp5 + 0.02698408541064610 * white;
+            const pinkVal = p_lp1 + p_lp2 + p_lp3 + p_lp4 + p_lp5 + p_lp6 + white * 0.0342675832159306;
+            p_lp6 = white * 0.0088766118009356;
+            pink = pinkVal;
+            let w = pink - hp1_a1 * hp1w1 - hp1_a2 * hp1w2;
+            pink = hp1_b0 * w + hp1_b1 * hp1w1 + hp1_b2 * hp1w2;
+            hp1w2 = hp1w1;
+            hp1w1 = w;
+            w = pink - hp2_a1 * hp2w1 - hp2_a2 * hp2w2;
+            pink = hp2_b0 * w + hp2_b1 * hp2w1 + hp2_b2 * hp2w2;
+            hp2w2 = hp2w1;
+            hp2w1 = w;
+            w = pink - lp1_a1 * lp1w1 - lp1_a2 * lp1w2;
+            pink = lp1_b0 * w + lp1_b1 * lp1w1 + lp1_b2 * lp1w2;
+            lp1w2 = lp1w1;
+            lp1w1 = w;
+            w = pink - lp2_a1 * lp2w1 - lp2_a2 * lp2w2;
+            pink = lp2_b0 * w + lp2_b1 * lp2w1 + lp2_b2 * lp2w2;
+            lp2w2 = lp2w1;
+            lp2w1 = w;
+            if (pink > maxAmp)
+                pink = maxAmp;
+            else if (pink < -maxAmp)
+                pink = -maxAmp;
+            if (i > randMax) {
+                accum += (pink * pink);
+                if ((i - randMax) % previewStep === 0 && previewIndex < previewSize) {
+                    previewData[previewIndex++] = pink;
+                }
+                let sampleInt = Math.floor(pink * 2147483647.0);
+                if (sampleInt > 2147483647)
+                    sampleInt = 2147483647;
+                if (sampleInt < -2147483648)
+                    sampleInt = -2147483648;
+                for (let ch = 0; ch < channels; ch++) {
+                    const byte1 = (sampleInt >> 8) & 0xFF;
+                    const byte2 = (sampleInt >> 16) & 0xFF;
+                    const byte3 = (sampleInt >> 24) & 0xFF;
+                    view.setUint8(writeOffset, byte1);
+                    view.setUint8(writeOffset + 1, byte2);
+                    view.setUint8(writeOffset + 2, byte3);
+                    writeOffset += 3;
+                }
+            }
+        }
+        const rms = 10.0 * Math.log10(accum / outputSamples);
+        const blob = new Blob([buffer], { type: "audio/wav" });
+        const url = URL.createObjectURL(blob);
+        return {
+            blob,
+            url,
+            rmsDb: rms + 3.01,
+            duration,
+            filename: "pink_noise_output.wav",
+            previewData
+        };
+    }
+    writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+    writeWavHeader(view, dataLength, sampleRate, channels) {
+        this.writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + dataLength, true);
+        this.writeString(view, 8, 'WAVE');
+        this.writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, channels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * channels * 3, true);
+        view.setUint16(32, channels * 3, true);
+        view.setUint16(34, 24, true);
+        this.writeString(view, 36, 'data');
+        view.setUint32(40, dataLength, true);
+    }
+}
+
+// --- UI Logic ---
+document.getElementById('generateBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('generateBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const resultArea = document.getElementById('resultArea');
+    
+    // Inputs
+    const sampleRate = parseInt(document.querySelector('input[name="samplerate"]:checked').value);
+    const duration = parseInt(document.getElementById('duration').value);
+    const channels = parseInt(document.getElementById('channels').value);
+    let filename = document.getElementById('filename').value.trim();
+    if (!filename.toLowerCase().endsWith('.wav')) filename += '.wav';
+
+    // Reset UI
+    btn.disabled = true;
+    btn.innerText = "Generating...";
+    progressContainer.style.display = 'block';
+    resultArea.style.display = 'none';
+    progressBar.style.width = '0%';
+
+    // Run Generator
+    const generator = new SmptePinkNoiseGenerator({
+        sampleRate,
+        duration,
+        channels,
+        onProgress: (percent) => {
+            progressBar.style.width = `${percent * 100}%`;
+        }
+    });
+
+    try {
+        const result = await generator.generate();
+
+        // Update Stats
+        const statsText = document.getElementById('statsText');
+        statsText.innerText = `RMS: ${result.rmsDb.toFixed(2)} dBFS(AES17) | Time: ${result.duration}s`;
+
+        // Update Download Link
+        const link = document.getElementById('downloadLink');
+        link.href = result.url;
+        link.download = filename;
+        link.innerText = `Download ${filename}`;
+
+        // Draw Waveform
+        drawWaveform(result.previewData);
+
+        // Show Result
+        resultArea.style.display = 'block';
+    } catch (e) {
+        alert("Error: " + e);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Generate Audio";
+        setTimeout(() => progressContainer.style.display = 'none', 1000);
+    }
+});
+
+function drawWaveform(data) {
+    const canvas = document.getElementById('waveformCanvas');
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width = canvas.offsetWidth;
+    const height = canvas.height;
+    const centerY = height / 2;
+    
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#fafafa';
+    ctx.fillRect(0,0,width,height);
+    
+    ctx.beginPath();
+    ctx.strokeStyle = '#FF0080';
+    ctx.lineWidth = 1;
+    
+    // Center Line
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(width, centerY);
+    ctx.stroke();
+
+    // Waveform
+    ctx.beginPath();
+    const stepX = width / data.length;
+    
+    // Scale factor (assuming max peak is roughly 1.0)
+    // Actually the algorithm limits to ~0.33, so we can scale up for visibility
+    const visualScale = (height / 2) * 2.5; 
+
+    for (let i = 0; i < data.length; i++) {
+        const x = i * stepX;
+        const y = centerY - (data[i] * visualScale);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+}
+</script>
+
+</body>
+</html>
